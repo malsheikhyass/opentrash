@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opentrash"
+version = "0.2.0"
+description = "Open-source cloud-native geospatial Python package for residential waste collection analytics."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Mohamad Alsheikh Yassin" }]
+maintainers = [{ name = "Mohamad Alsheikh Yassin" }]
+requires-python = ">=3.11"
+keywords = [
+    "geospatial",
+    "waste-management",
+    "telematics",
+    "duckdb",
+    "geopandas",
+    "civic-technology",
+    "gis",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+
+# Core dependencies — what every lesson onward expects.
+# Geo and DuckDB are heavy enough to declare upfront so the install story is
+# consistent from Lesson 0; future lessons add to extras, not base.
+dependencies = [
+    "pandas",
+    "pyarrow",
+    "duckdb>=1.0",
+    "geopandas",
+    "shapely",
+    "pyproj",
+    "openpyxl",
+]
+
+[project.optional-dependencies]
+# Vendor-specific GPS adapter dependencies, opted into per environment.
+geotab = [
+    "mygeotab",
+    "pytz",
+]
+postgres = [
+    "psycopg2-binary",
+    "sqlalchemy>=2.0",
+    "pytz",
+]
+
+# Developer tooling.
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+    "pytz",
+]
+
+[project.scripts]
+opentrash = "opentrash.cli:main"
+
+[project.urls]
+Homepage = "https://opentrash.app/"
+Documentation = "https://opentrash.app/"
+Course = "https://airesearchcorp.org/opentrash/"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["opentrash*"]
+
+[tool.setuptools.package-data]
+"opentrash.routeview.templates" = ["*.html"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# Enable a tight, useful default rule set without going overboard.
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]   # line-length handled by formatter / context
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

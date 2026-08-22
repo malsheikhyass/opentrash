@@ -1,0 +1,6 @@
+include LICENSE
+include NOTICE
+include CHANGELOG.md
+include CITATION.cff
+include README.md
+recursive-include opentrash/routeview/templates *.html

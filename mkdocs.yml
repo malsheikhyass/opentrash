@@ -1,0 +1,52 @@
+# MkDocs configuration for the opentrash documentation site.
+# Builds the docs/ folder and deploys via .github/workflows/docs.yml on push.
+
+site_name: opentrash
+site_description: Cloud-native geospatial tools for residential waste operations.
+site_url: https://opentrash.app/
+repo_url: https://github.com/malsheikhyass/opentrash
+repo_name: malsheikhyass/opentrash
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - scheme: default
+      primary: black
+      accent: cyan
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      primary: black
+      accent: cyan
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Architecture: architecture.md
+  - Roadmap: roadmap.md
+  - Learn more: learn.md

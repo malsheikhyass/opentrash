@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>RouteView — Route {ROUTE_ID} — {vehicle} — {day_iso}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+<style>
+  html, body, #map {{{{ height: 100%; margin: 0; }}}}
+
+  .panel {{{{
+    position: absolute; top: 12px; left: 12px; z-index: 2;
+    background: rgba(255,255,255,0.93);
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    font-size: 13px; line-height: 1.25;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.14);
+    width: 600px; max-height: 85vh; overflow: auto;
+    transition: width 180ms ease, max-height 180ms ease;
+  }}}}
+  .panel.collapsed {{{{
+    width: 260px;
+    max-height: 52px;
+    overflow: hidden;
+  }}}}
+  .panelHeader {{{{
+    display:flex; align-items:center; justify-content:space-between;
+    gap: 10px;
+  }}}}
+  .title {{{{ font-weight: 700; font-size: 14px; }}}}
+  .meta {{{{ opacity: 0.75; margin-top: 4px; }}}}
+  .toggleBtn {{{{
+    border: 1px solid rgba(0,0,0,0.18);
+    background: rgba(255,255,255,0.95);
+    border-radius: 10px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-weight: 600;
+  }}}}
+
+  .hr {{{{ height:1px; background: rgba(0,0,0,0.08); margin: 10px 0; }}}}
+
+  table {{{{ border-collapse: collapse; width: 100%; margin-top: 8px; }}}}
+  td, th {{{{
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: 6px 6px;
+    text-align: left;
+    vertical-align: top;
+  }}}}
+  th {{{{ font-weight: 600; white-space: nowrap; }}}}
+
+  .noteBox {{{{
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.04);
+    border: 1px solid rgba(0,0,0,0.08);
+  }}}}
+
+  .rowAccent {{{{ border-left: 6px solid transparent; }}}}
+  .tripRow td {{{{ white-space: nowrap; }}}}
+  .tripRow td:first-child {{{{ white-space: normal; }}}}
+  .tipRow td {{{{
+    background: rgba(0,0,0,0.02);
+    white-space: normal;
+    line-height: 1.35;
+  }}}}
+  .smallMuted {{{{ opacity: 0.7; font-size: 12px; }}}}
+
+  /* NEW: dual ton lines under tip */
+  .tipLines {{{{ margin-top: 4px; font-size: 12px; opacity: 0.85; line-height: 1.35; }}}}
+  .tipTonLine {{{{ display: inline-block; }}}}
+
+  .controls {{{{
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.03);
+    border: 1px solid rgba(0,0,0,0.08);
+  }}}}
+  .controlsRow {{{{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+    margin-top: 6px;
+  }}}}
+  .controls label {{{{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    margin: 0;
+    white-space: nowrap;
+  }}}}
+  .controls select {{{{
+    width: 100%;
+    padding: 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.15);
+  }}}}
+
+  @media (max-width: 640px) {{{{
+    .panel {{{{ width: calc(100% - 24px); left: 12px; right: 12px; }}}}
+    .panel.collapsed {{{{ width: calc(100% - 24px); }}}}
+  }}}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="panel" class="panel">
+  <div class="panelHeader">
+    <div>
+      <div class="title">RouteView</div>
+      <div class="meta">Route <b>{ROUTE_ID}</b> · Vehicle <b>{vehicle}</b> · Day <b>{day_iso} {day_time_label}</b></div>
+      <div id="debugLine" class="smallMuted"></div>
+    </div>
+    <button id="togglePanel" class="toggleBtn">Hide</button>
+  </div>
+
+  <div class="controls">
+    <div><b>Basemap</b></div>
+    <select id="basemapSelect">
+      <option value="osm" selected>OSM</option>
+      <option value="imagery">Imagery</option>
+      <option value="light">Light</option>
+    </select>
+
+    <div class="hr"></div>
+    <div><b>Layers</b></div>
+    <div class="controlsRow">
+      <label><input type="checkbox" id="tog_route" checked/> Route</label>
+      <label><input type="checkbox" id="tog_parcels" checked/> Parcels</label>
+      <label><input type="checkbox" id="tog_sites" checked/> Sites</label>
+      <label><input type="checkbox" id="tog_gps" checked/> GPS</label>
+      <label><input type="checkbox" id="tog_cooldown" checked/> Cooldown</label>
+      <label><input type="checkbox" id="tog_landfills" checked/> Facilities</label>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+  <div id="runmeta"></div>
+  <div id="completion"></div>
+  <div class="hr"></div>
+  <div id="stats"></div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+<script>
+const USE_CODE = {use_code_json};
+const route = {route_json};
+const landfills = {lf_json};
+const pts = {pts_json};
+const stats = {stats_json_enriched};
+const parcels = {parcels_json};
+const sites = {sites_json};
+const completion = {summary_json};
+
+const TON_NOTE_FIELD = {field_note_json};
+const TON_NOTE_SCALE = {scale_note_json};
+
+const styles = {{{{
+  osm: {{{{ version: 8, sources: {{{{ bm: {{{{ type: 'raster', tiles: ['https://tile.openstreetmap.org/{{{{z}}}}/{{{{x}}}}/{{{{y}}}}.png'], tileSize: 256 }}}} }}}}, layers: [{{{{ id:'bm', type:'raster', source:'bm' }}}}] }}}},
+  imagery: {{{{ version: 8, sources: {{{{ bm: {{{{ type: 'raster', tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{{{z}}}}/{{{{y}}}}/{{{{x}}}}'], tileSize: 256 }}}} }}}}, layers: [{{{{ id:'bm', type:'raster', source:'bm' }}}}] }}}},
+  light: {{{{ version: 8, sources: {{{{ bm: {{{{ type: 'raster', tiles: ['https://basemaps.cartocdn.com/light_all/{{{{z}}}}/{{{{x}}}}/{{{{y}}}}.png'], tileSize: 256 }}}} }}}}, layers: [{{{{ id:'bm', type:'raster', source:'bm' }}}}] }}}}
+}}}};
+
+const map = new maplibregl.Map({{{{
+  container: 'map',
+  style: styles.osm,
+  center: [{center_lon}, {center_lat}],
+  zoom: 12
+}}}});
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+// ---- colors (kind-driven) ----
+function segColor(kind, segNo) {{{{
+  if (kind === "Preload (not counted)") return "#1f77b4";  // BLUE
+  if (kind === "Return") return "#6b7280";                 // GRAY
+
+  // Load N
+  if (typeof kind === "string" && kind.startsWith("Load")) {{{{
+    const m = kind.match(/Load\\s+(\\d+)/i);
+    const n = m ? Number(m[1]) : Number(segNo || 0);
+    if (n === 1) return "#2ca02c";   // green
+    if (n === 2) return "#ff7f0e";   // orange
+    if (n === 3) return "#e377c2";   // pink
+    return "#9467bd";               // purple for 4+
+  }}}}
+
+  // fallback
+  if (segNo === 1) return "#2ca02c";
+  if (segNo === 2) return "#ff7f0e";
+  if (segNo === 3) return "#e377c2";
+  return "#111827";
+}}}}
+
+function buildDebugLine() {{{{
+  const segs = (stats && stats.segments) ? stats.segments : [];
+  let tipCount = 0;
+  segs.forEach(s => {{{{
+    if (s.tip_events && s.tip_events.length) tipCount += s.tip_events.length;
+  }}}});
+  const el = document.getElementById("debugLine");
+  el.textContent = "Segments: " + segs.length + " · Tip events: " + tipCount;
+}}}}
+
+function buildRunMeta() {{{{
+  const div = document.getElementById('runmeta');
+  const pre = (stats.pre_trip_depot_min ?? 0);
+  const post = (stats.post_return_depot_min ?? 0);
+
+  let tonLine = '';
+  const fieldTxt = TON_NOTE_FIELD ? ('<span style="color:#b91c1c"><b>' + TON_NOTE_FIELD + '</b></span>') : 'FIELD ok';
+  const scaleTxt = TON_NOTE_SCALE ? ('<span style="color:#b91c1c"><b>' + TON_NOTE_SCALE + '</b></span>') : 'SCALE ok';
+  tonLine = '<br/><b>Tonnage</b>: ' + fieldTxt + ' · ' + scaleTxt;
+
+  div.innerHTML =
+    '<div class="noteBox">' +
+    '<b>Window</b>: Takeoff <b>' + (stats.takeoff_time || '') + '</b> · End <b>' + (stats.service_end_time || '') + '</b> (cap: ' + (stats.max_shift_hours ?? '') + ' hr)<br/>' +
+    '<b>Depot</b>: Pre-takeoff <b>' + pre + ' min</b> · Post-return <b>' + post + ' min</b>' +
+    tonLine +
+    '</div>';
+}}}}
+
+function buildCompletion() {{{{
+  const div = document.getElementById('completion');
+  if (!completion || !completion.eligible_total) {{{{ div.innerHTML = ''; return; }}}}
+
+  const op = completion.operational_minutes_in_out;
+  const mps = completion.minutes_per_served_parcel;
+  const mpe = completion.minutes_per_eligible_parcel;
+
+  let extra = '';
+  if (op !== undefined && op !== null) {{{{
+    extra += '<br/>Operational minutes: <b>' + op + '</b> (in+out route)';
+  }}}}
+  if (mps !== undefined && mps !== null) {{{{
+    extra += '<br/>Min/served parcel: <b>' + mps + '</b>';
+  }}}}
+  if (mpe !== undefined && mpe !== null) {{{{
+    extra += ' · Min/eligible parcel: <b>' + mpe + '</b>';
+  }}}}
+
+  div.innerHTML =
+    '<div class="noteBox">' +
+    '<b>Completion</b><br/>' +
+    'Eligible parcels: <b>' + completion.eligible_total + '</b> · Served: <b>' + completion.served + '</b> · <b>' + completion.pct + '%</b>' +
+    extra +
+    '</div>';
+}}}}
+
+function fmt(x) {{{{
+  if (x === null || x === undefined) return '';
+  return String(x);
+}}}}
+
+function buildStats() {{{{
+  const div = document.getElementById('stats');
+  let html = '<div><b>Summary stats</b></div>';
+  html += '<table><thead><tr><th>Trip</th><th>In-route</th><th>Out-of-route</th><th>Cooldown</th><th>Pings</th></tr></thead><tbody>';
+
+  function fmtTons(x) {{{{
+    if (x === null || x === undefined || x === '') return '';
+    const n = Number(x);
+    if (Number.isNaN(n)) return '';
+    return n.toFixed(2) + ' tons';
+  }}}}
+
+  function fmtTonLine(label, ton, matl, dtstr) {{{{
+    const parts = [];
+    const t = fmtTons(ton);
+    if (t) parts.push('<b>' + t + '</b>');
+    if (matl) parts.push(String(matl));
+    if (dtstr) parts.push(String(dtstr));
+    return '<span class="tipTonLine"><b>' + label + ':</b> ' + parts.join(' · ') + '</span>';
+  }}}}
+
+  (stats.segments || []).forEach(it => {{{{
+    const c = segColor(it.kind, it.seg_no);
+
+    html += '<tr class="rowAccent tripRow" style="border-left-color:' + c + '">' +
+            '<td><b>' + fmt(it.kind) + '</b></td>' +
+            '<td>' + fmt(it.in_route_min) + ' min</td>' +
+            '<td>' + fmt(it.out_of_route_min) + ' min</td>' +
+            '<td>' + fmt(it.cooldown_min) + ' min</td>' +
+            '<td>' + fmt(it.pings) + '</td>' +
+            '</tr>';
+
+    if (it.tip_events && it.tip_events.length) {{{{
+      const lines = it.tip_events.map(e => {{{{
+        const base = '<b>Tip:</b> <b>' + fmt(e.landfill) + ' ' + fmt(e.start) + '–' + fmt(e.end) +
+                     ' (' + fmt(e.minutes) + ' minutes)</b>';
+
+        const radLine  = fmtTonLine('FIELD',  e.rad_ton,  e.rad_matl,  e.rad_dt);
+        const artsLine = fmtTonLine('SCALE', e.arts_ton, e.arts_matl, e.arts_dt);
+
+        return base + '<div class="tipLines">' + radLine + '<br/>' + artsLine + '</div>';
+      }}}}).join('<br/>');
+
+      html += '<tr class="tipRow"><td colspan="5">' + lines + '</td></tr>';
+    }}}}
+  }}}});
+
+  html += '</tbody></table>';
+  div.innerHTML = html;
+}}}}
+
+function setVis(layerId, on) {{{{
+  if (!map.getLayer(layerId)) return;
+  map.setLayoutProperty(layerId, 'visibility', on ? 'visible' : 'none');
+}}}}
+
+const popup = new maplibregl.Popup({{{{ closeButton: false, closeOnClick: false }}}});
+
+function hookHover(layerId, htmlFn) {{{{
+  map.on('mousemove', layerId, (e) => {{{{
+    map.getCanvas().style.cursor = 'pointer';
+    const p = (e.features && e.features.length) ? (e.features[0].properties || {{{{}}}}) : {{{{}}}};
+    popup.setLngLat(e.lngLat).setHTML(htmlFn(p)).addTo(map);
+  }}}});
+  map.on('mouseleave', layerId, () => {{{{
+    map.getCanvas().style.cursor = '';
+    popup.remove();
+  }}}});
+}}}}
+
+function enableHover(layerId, htmlFn) {{{{
+  if (!map.getLayer(layerId)) return;
+  hookHover(layerId, htmlFn);
+}}}}
+
+map.on('load', () => {{{{
+  buildDebugLine();
+  buildRunMeta();
+  buildCompletion();
+  buildStats();
+
+  map.addSource('route', {{{{ type: 'geojson', data: route }}}});
+  map.addSource('landfills', {{{{ type: 'geojson', data: landfills }}}});
+  map.addSource('parcels', {{{{ type: 'geojson', data: parcels }}}});
+  map.addSource('sites', {{{{ type: 'geojson', data: sites }}}});
+  map.addSource('pts', {{{{ type: 'geojson', data: pts }}}});
+
+  map.addLayer({{{{ id:'route-fill', type:'fill', source:'route', paint: {{{{ 'fill-color':'#000', 'fill-opacity': 0.06 }}}} }}}});
+  map.addLayer({{{{ id:'route-line', type:'line', source:'route', paint: {{{{ 'line-color':'#111', 'line-width': 3, 'line-opacity': 0.85 }}}} }}}});
+
+  map.addLayer({{{{ id:'landfills-fill', type:'fill', source:'landfills', paint: {{{{ 'fill-color':'#111', 'fill-opacity': 0.08 }}}} }}}});
+  map.addLayer({{{{ id:'landfills-line', type:'line', source:'landfills', paint: {{{{ 'line-color':'#111', 'line-width': 2, 'line-opacity': 0.55 }}}} }}}});
+
+  map.addLayer({{{{
+    id: 'parcels-fill',
+    type: 'fill',
+    source: 'parcels',
+    paint: {{{{
+      'fill-color': ['match', ['get','served_kind'],
+        'Load 1', '#2ca02c',
+        'Load 2', '#ff7f0e',
+        'Load 3', '#e377c2',
+        'Load 4', '#9467bd',
+        '#9ca3af'
+      ],
+      'fill-opacity': 0.22
+    }}}}
+  }}}});
+  map.addLayer({{{{ id:'parcels-outline', type:'line', source:'parcels', paint: {{{{ 'line-color': 'rgba(0,0,0,0.25)', 'line-width': 1 }}}} }}}});
+
+  map.addLayer({{{{
+    id: 'sites-points',
+    type: 'circle',
+    source: 'sites',
+    paint: {{{{
+      'circle-radius': ['case', ['==', ['to-number',['get','ada']], 1], 9, ['==', ['to-number',['get','key_stop']], 1], 9, 4.5],
+      'circle-color': [
+        'case',
+        ['==', ['to-number',['get','ada']], 1], '#4169E1',
+        ['==', ['to-number',['get','key_stop']], 1], '#DC2626',
+        ['match', ['get','served_kind'], 'Load 1', '#2ca02c', 'Load 2', '#ff7f0e', 'Load 3', '#e377c2', 'Load 4', '#9467bd', '#111']
+      ],
+      'circle-opacity': 0.95,
+      'circle-stroke-color': '#111',
+      'circle-stroke-width': 0.7
+    }}}}
+  }}}});
+
+  // GPS colors: kind-driven first, then Load number fallback
+  map.addLayer({{{{
+    id: 'gps-points',
+    type: 'circle',
+    source: 'pts',
+    paint: {{{{
+      'circle-radius': 3.2,
+      'circle-opacity': 0.85,
+      'circle-color': [
+        'case',
+        ['==', ['get','seg_kind'], 'Preload (not counted)'], '#1f77b4',
+        ['==', ['get','seg_kind'], 'Return'], '#6b7280',
+        ['match', ['get','seg_no'], 1, '#2ca02c', 2, '#ff7f0e', 3, '#e377c2', 4, '#9467bd', '#111827']
+      ]
+    }}}}
+  }}}});
+
+  const breakSpeed = (stats.break_speed_mph ?? 5);
+  map.addLayer({{{{
+    id: 'cooldown-ring',
+    type: 'circle',
+    source: 'pts',
+    filter: ['all',
+      ['has','speed_mph'],
+      ['<=',['to-number',['get','speed_mph']], breakSpeed],
+      ['!=',['get','in_tip'], true],
+      ['!=',['get','in_depot'], true]
+    ],
+    paint: {{{{
+      'circle-radius': 6,
+      'circle-opacity': 0.95,
+      'circle-color': 'rgba(0,0,0,0)',
+      'circle-stroke-color': '#111',
+      'circle-stroke-width': 1.3
+    }}}}
+  }}}});
+
+  // ---- HOVERS ----
+  enableHover('parcels-fill', (p) => {{{{
+    const title = (p.address || p.address_full || '');
+    const apn = (p.APN || '');
+    const nuc = (p.NUCLEUS_US || p.nucleus_us || '');
+    const nucLabel = (nuc !== null && nuc !== undefined && String(nuc).trim() !== '')
+      ? (USE_CODE[Number(nuc)] || String(nuc))
+      : '';
+    const units = (p.UNITQTY || '');
+    const completed = (Number(p.is_served) === 1) ? 'Yes' : 'No';
+    const load = (p.served_kind || '');
+    // Patterns block (from L10 detection over the analysis window)
+    const w1 = (p.expected_vehicle_weekly1 || '');
+    const w2 = (p.expected_vehicle_weekly2 || '');
+    const bw = (p.expected_vehicle_biweekly || '');
+    let patternsBlock = '';
+    if (w1 || w2 || bw) {{{{
+      patternsBlock = '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.08);margin:6px 0">' +
+        '<div style="font-weight:600;font-size:12px">Patterns (analysis window)</div>' +
+        (w1 ? ('Weekly 1: ' + w1 + '<br/>') : '') +
+        (w2 ? ('Weekly 2: ' + w2 + '<br/>') : '') +
+        (bw ? ('Biweekly: ' + bw + '<br/>') : '');
+    }}}}
+    return '<b>' + title + '</b><br/>' +
+      'APN: ' + apn + '<br/>' +
+      'Use code: ' + nucLabel + '<br/>' +
+      'Number of residential units: ' + units + '<br/>' +
+      'Completed: ' + completed + '<br/>' +
+      'Load: ' + load +
+      patternsBlock;
+  }}}});
+
+  enableHover('sites-points', (p) => {{{{
+    const title = (p.site_id || '');
+    const addr = (p.site_address || '');
+    const status = (p.status || '');
+    const ada = (Number(p.ada) === 1) ? 'Yes' : 'No';
+    const key = (Number(p.key_stop) === 1) ? 'Yes' : 'No';
+    return '<b>' + title + '</b><br/>' +
+      addr + '<br/>' +
+      'Status: ' + status + '<br/>' +
+      'ADA: ' + ada + '<br/>' +
+      'Key stop: ' + key;
+  }}}});
+
+  enableHover('gps-points', (p) => {{{{
+    const sp = (p.speed_mph !== undefined && p.speed_mph !== null && p.speed_mph !== '')
+      ? (Number(p.speed_mph).toFixed(0) + ' mph')
+      : 'n/a';
+    const dtp = (p.dt_str || p.DateTimeLocal || '');
+    return '<b>' + dtp + '</b><br/>' +
+      (p.seg_kind || '') + '<br/>' +
+      'In route: ' + (p.in_route ?? '') + '<br/>' +
+      'In tip: ' + (p.in_tip ?? '') + '<br/>' +
+      'In depot: ' + (p.in_depot ?? '') + '<br/>' +
+      'Speed: ' + sp;
+  }}}});
+
+  // toggles
+  function wire(id, layers) {{{{
+    const el = document.getElementById(id);
+    el.addEventListener('change', () => layers.forEach(ly => setVis(ly, el.checked)));
+  }}}}
+  wire('tog_route', ['route-fill','route-line']);
+  wire('tog_parcels', ['parcels-fill','parcels-outline']);
+  wire('tog_sites', ['sites-points']);
+  wire('tog_gps', ['gps-points']);
+  wire('tog_cooldown', ['cooldown-ring']);
+  wire('tog_landfills', ['landfills-fill','landfills-line']);
+
+  // panel toggle
+  document.getElementById('togglePanel').addEventListener('click', () => {{{{
+    const panel = document.getElementById('panel');
+    const btn = document.getElementById('togglePanel');
+    const collapsed = panel.classList.toggle('collapsed');
+    btn.textContent = collapsed ? 'Show' : 'Hide';
+  }}}});
+
+  // basemap change
+  document.getElementById('basemapSelect').addEventListener('change', (e) => {{{{
+    const v = e.target.value;
+    map.setStyle(styles[v]);
+    map.once('styledata', () => map.fire('load'));
+  }}}});
+
+  // fit to route
+  const bbox = new maplibregl.LngLatBounds();
+  route.features.forEach(f => {{{{
+    const g = f.geometry;
+    const add = (c) => bbox.extend(c);
+    if (g.type === 'Polygon') g.coordinates[0].forEach(add);
+    else if (g.type === 'MultiPolygon') g.coordinates.forEach(poly => poly[0].forEach(add));
+  }}}});
+  map.fitBounds(bbox, {{{{ padding: 40 }}}});
+}}}});
+</script>
+</body>
+</html>

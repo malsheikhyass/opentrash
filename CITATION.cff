@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+title: "opentrash: open-source geospatial analytics for residential waste collection"
+message: "If you use this software, please cite it using the metadata in this file."
+type: software
+authors:
+  - given-names: Mohamad
+    family-names: Alsheikh Yassin
+    affiliation: "AI Research Corps (AIRC)"
+license: Apache-2.0
+version: "0.1.0"
+date-released: "2026-06-07"
+url: "https://opentrash.app/"
+repository-code: "https://github.com/malsheikhyass/opentrash"
+abstract: >
+  opentrash is an open-source, cloud-native Python package for analyzing
+  residential waste-collection operations. It ingests GPS telematics,
+  parcel polygons, route polygons, and facility locations, performs one
+  disciplined spatial-join pass, and produces two products: per-parcel
+  service-signature detection (patterns) and interactive single-day route
+  maps (RouteView). The design principle is "spatial joins are
+  infrastructure; products are calculations."
+keywords:
+  - geospatial
+  - waste-management
+  - telematics
+  - duckdb
+  - geopandas
+  - civic-technology
