@@ -1,0 +1,105 @@
+# Release workflow.
+#
+# Triggers on git tags matching `v*` (e.g. `v0.1.0`, `v0.2.0`, `v1.0.0`).
+#
+# Steps:
+#   1. Verify the tag matches the version in pyproject.toml
+#      (so a typo doesn't ship the wrong version).
+#   2. Run the full test suite + lint on Python 3.11 and 3.12.
+#   3. Build the sdist + wheel into dist/.
+#   4. Upload to PyPI using the PYPI_API_TOKEN repository secret.
+#
+# Requires the repository secret PYPI_API_TOKEN to be configured at
+# Settings → Secrets and variables → Actions. Use a project-scoped token
+# from https://pypi.org/manage/account/token/.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  verify-version:
+    name: Verify tag matches pyproject version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare git tag with pyproject.toml version
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/v}"
+          PY_VERSION=$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          echo "git tag:    v${TAG}"
+          echo "pyproject:  ${PY_VERSION}"
+          if [ "${TAG}" != "${PY_VERSION}" ]; then
+            echo "::error::Tag (v${TAG}) does not match pyproject version (${PY_VERSION})."
+            exit 1
+          fi
+
+  test:
+    name: Test on Python ${{ matrix.python-version }}
+    needs: verify-version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package + dev extras
+        run: pip install -e ".[dev,geotab,postgres]"
+      - name: Lint
+        run: ruff check .
+      - name: Test
+        run: pytest -q
+
+  build:
+    name: Build sdist + wheel
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: pip install build
+      - name: Build distributions
+        run: python -m build
+      - name: Show built artifacts
+        run: ls -la dist/
+      - name: Capture version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Upload artifacts (CI bundle)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install twine
+        run: pip install twine
+      - name: Upload to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload --non-interactive dist/*
