@@ -9,7 +9,7 @@ minor versions; these are called out explicitly when they occur.
 
 ## [Unreleased]
 
-## [0.2.0] — 2026-08-21
+## [0.2.1] — 2026-08-21
 
 ### Changed (breaking)
 

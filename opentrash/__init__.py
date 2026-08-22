@@ -15,4 +15,4 @@ Each lesson lights up modules under one of these directories. Lesson 0 lands
 the first one: ``prep.sites``.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
